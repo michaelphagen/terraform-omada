@@ -109,7 +109,7 @@ func newMockController(t *testing.T, opts ...mockOption) *httptest.Server {
 	nextID := 1
 	networks := map[string]map[string]any{
 		"net-1": {
-			"id": "net-1", "name": "IoT", "purpose": "interface",
+			"id": "net-1", "name": "IoT", "purpose": "interface", "primary": false,
 			"vlan": 30, "vlanType": 0, "application": 0,
 			"gatewaySubnet": "192.168.30.1/24",
 			// per-VLAN switching/security toggles
