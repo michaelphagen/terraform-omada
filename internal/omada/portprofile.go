@@ -26,11 +26,16 @@ type STPSetting struct {
 }
 
 // PortProfile is a switch port profile. Verified against a live v6.2 controller
-// (/setting/lan/profiles). Read-only fields (flag, prohibitModify, resource,
-// networkConflict) are not modelled and are preserved on update.
+// (/setting/lan/profiles). Read-only fields (prohibitModify, resource,
+// networkConflict) are not modelled and are preserved on update; flag is read
+// but never written.
 type PortProfile struct {
-	ID                 string   `json:"id"`
-	Name               string   `json:"name"`
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	// Flag says who made the profile: 0 for the built-ins (All, Default,
+	// Disable), 1 for the one the controller creates with each VLAN network,
+	// 2 for one made in the UI or through the API. Read-only.
+	Flag               int      `json:"flag"`
 	POE                int      `json:"poe"`
 	VLANConfigEnable   bool     `json:"vlanConfigEnable"`
 	NetworkTagsSetting int      `json:"networkTagsSetting"`

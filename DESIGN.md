@@ -408,6 +408,7 @@ preserved via read-modify-write.
 | `omada_site_settings` | R/U (singleton) | live · subset | ~45 fields; large object |
 | `omada_sites` (data) | R | live | |
 | `omada_networks` (data) | R | live | |
+| `omada_port_profiles` (data) | R | live (v5.15) | `origin` from the profile's `flag`: 0 built-in, 1 made with a VLAN network, 2 user |
 | `omada_wan` (data) | R | live | **read-only by design** — see §5.4 |
 | `omada_wan_ipv6` | CRUD (adopt-only) | **read live, writes inferred** | narrow exception to "Writable WAN" — see §5.3; models only `wanPortIpv6Setting`, leaves IPv4/MAC untouched |
 | `omada_port_forwards` (data) | R | mock | discovery — list rules + IDs |

@@ -130,6 +130,9 @@ func newMockController(t *testing.T, opts ...mockOption) *httptest.Server {
 			},
 		},
 	}
+	// Port profiles, declared here because creating a VLAN network adds one.
+	profs := map[string]map[string]any{}
+	profNext := 1
 	const netBase = "/abc123/api/v2/sites/site-1/setting/lan/networks"
 
 	// Collection: GET (list) + POST (create).
@@ -188,6 +191,15 @@ func newMockController(t *testing.T, opts ...mockOption) *httptest.Server {
 			in["allLan"] = true
 			in["primary"] = false
 			networks[id] = in
+			// On v5.15 the controller also creates a port profile of the same
+			// name carrying the VLAN untagged (flag 1), and deletes it with the
+			// network. A second profile of that name is refused (-33506).
+			pid := fmt.Sprintf("prof-%d", profNext)
+			profNext++
+			profs[pid] = map[string]any{
+				"id": pid, "name": in["name"], "flag": 1, "nativeNetworkId": id,
+				"tagNetworkIds": []string{}, "untagNetworkIds": []string{},
+			}
 			// The id comes back as a bare string, not an object.
 			writeEnvelope(w, 0, "Success.", id)
 		default: // GET
@@ -269,6 +281,11 @@ func newMockController(t *testing.T, opts ...mockOption) *httptest.Server {
 		switch r.Method {
 		case http.MethodDelete:
 			delete(networks, id)
+			for pid, p := range profs {
+				if p["flag"] == 1 && p["nativeNetworkId"] == id {
+					delete(profs, pid)
+				}
+			}
 			writeEnvelope(w, 0, "", nil)
 		default: // PATCH
 			var in map[string]any
@@ -633,8 +650,6 @@ func newMockController(t *testing.T, opts ...mockOption) *httptest.Server {
 	})
 
 	// Stateful port-profile store (POST create, GET list, PATCH /{id}, DELETE).
-	profs := map[string]map[string]any{}
-	profNext := 1
 	const profBase = "/abc123/api/v2/sites/site-1/setting/lan/profiles"
 	mux.HandleFunc(profBase, func(w http.ResponseWriter, r *http.Request) {
 		if !requireToken(w, r) {
@@ -651,6 +666,12 @@ func newMockController(t *testing.T, opts ...mockOption) *httptest.Server {
 			for _, k := range []string{"poe", "bandWidthCtrlType", "spanningTreeEnable", "portIsolationEnable", "loopbackDetectEnable"} {
 				if in[k] == nil {
 					writeEnvelope(w, -1001, "must not be null", nil)
+					return
+				}
+			}
+			for _, p := range profs {
+				if p["name"] == in["name"] {
+					writeEnvelope(w, -33506, "This Profile name already exists.", nil)
 					return
 				}
 			}
