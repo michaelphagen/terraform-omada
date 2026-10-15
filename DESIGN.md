@@ -277,7 +277,8 @@ Two shapes of Open API dependency have now appeared, and they are worth keeping
 apart because they fail differently:
 
 - **Write-only crossover** (`omada_switch_port`): the read is on the web API, so
-  a plan and a refresh work without credentials and only `apply` fails.
+  a plan and a refresh work without credentials and only `apply` fails. (On
+  v5.15 the write has a web-API fallback, §5.5.)
 - **Whole-document** (`omada_iot_radio`): `/setting/iot/radio` is served *only*
   under `/openapi/v1` — the web API answers `-1600` for the same path — so
   reading needs credentials too, and the failure appears on refresh. The
@@ -894,6 +895,17 @@ gateway:
   default on destroy would make `terraform destroy` silently reconfigure live
   switching, using this provider's guess rather than the practitioner's — so
   Delete drops the resource from state and warns, and nothing is written.
+
+**v5.15 controllers accept the whole document on the web API.** On v5.15
+(confirmed with ES206X-M2 and ES210X-M2 switches) `PATCH .../ports/{port}`
+takes the full port document as read and still refuses any subset with
+`-1001 General error`. That breaks the allow-list rule above, so it is only a
+fallback: `UpdateSwitchPort` uses it when no Open API credentials are
+configured, reads the port as an untyped map, changes only the nine keys the
+Open API body carries, and sends the rest back as it was read. The read and
+the write are separate calls, so a UI edit made in between is lost. A `-1001`
+or a missing route on this path is reported as `ErrOpenAPINotConfigured`,
+which keeps the v6.2 failure unchanged.
 
 **The gateway turned out to be the easy one.** `PATCH /sites/{site}/gateways/{mac}`
 on the *web* API is a genuine partial update — a body with one key changes that

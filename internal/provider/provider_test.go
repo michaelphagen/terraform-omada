@@ -48,11 +48,30 @@ func TestProviderSchema(t *testing.T) {
 	}
 }
 
+// mockOption changes newMockController's behaviour where controller versions
+// differ. The default is a v6.2 controller.
+type mockOption func(*mockConfig)
+
+type mockConfig struct {
+	// webAPIPortWrite serves PATCH /sites/{site}/switches/{mac}/ports/{port}
+	// on the web API, as v5.15 controllers do.
+	webAPIPortWrite bool
+}
+
+func withWebAPIPortWrite() mockOption {
+	return func(c *mockConfig) { c.webAPIPortWrite = true }
+}
+
 // newMockController returns an httptest server that emulates the Omada v6
 // info + login handshake plus the sites and networks list endpoints, so
 // acceptance tests run in CI without a real controller.
-func newMockController(t *testing.T) *httptest.Server {
+func newMockController(t *testing.T, opts ...mockOption) *httptest.Server {
 	t.Helper()
+
+	var cfg mockConfig
+	for _, o := range opts {
+		o(&cfg)
+	}
 
 	mux := http.NewServeMux()
 
@@ -1018,7 +1037,8 @@ func newMockController(t *testing.T) *httptest.Server {
 	// both halves honest: the read is served on the web API, and the write is
 	// only accepted on the Open API with a bearer token from the grant below.
 	// A test that broke that split (say, by writing through the web API) would
-	// fail here rather than only against a real controller.
+	// fail here rather than only against a real controller. withWebAPIPortWrite
+	// adds the v5.15 web-API write alongside it.
 	switchPorts := map[int]map[string]any{}
 	for i := 1; i <= 5; i++ {
 		switchPorts[i] = map[string]any{
@@ -1048,6 +1068,54 @@ func newMockController(t *testing.T) *httptest.Server {
 			out = append(out, switchPorts[i])
 		}
 		writeEnvelope(w, 0, "", out)
+	})
+
+	// The web API's per-port route. v6.2 has it but refuses every body with
+	// -1001 (DESIGN.md §5.5). v5.15 accepts the whole port document and
+	// refuses a partial one with the same "General error", so with
+	// withWebAPIPortWrite the mock requires every key the read returned. A
+	// provider that sent only the modelled fields would reset PoE and the rest
+	// on real hardware.
+	mux.HandleFunc("/abc123/api/v2/sites/site-1/switches/8C-86-DD-10-50-CA/ports/", func(w http.ResponseWriter, r *http.Request) {
+		if !requireToken(w, r) {
+			return
+		}
+		if !cfg.webAPIPortWrite {
+			writeEnvelope(w, -1001, "General error", nil)
+			return
+		}
+		num, err := strconv.Atoi(pathpkg.Base(r.URL.Path))
+		if r.Method != http.MethodPatch || err != nil {
+			writeEnvelope(w, -1600, "no such path", nil)
+			return
+		}
+		mu.Lock()
+		defer mu.Unlock()
+		cur, ok := switchPorts[num]
+		if !ok {
+			writeEnvelope(w, -1600, "no such path", nil)
+			return
+		}
+		var body map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			writeEnvelope(w, -1001, "General error", nil)
+			return
+		}
+		for k := range cur {
+			if _, ok := body[k]; !ok {
+				writeEnvelope(w, -1001, "General error", nil)
+				return
+			}
+		}
+		for k, v := range body {
+			cur[k] = v
+		}
+		if id, _ := cur["profileId"].(string); id == "prof-main" {
+			cur["profileName"] = "MAIN"
+		} else {
+			cur["profileName"] = "All"
+		}
+		writeEnvelope(w, 0, "", nil)
 	})
 
 	mux.HandleFunc("/openapi/authorize/token", func(w http.ResponseWriter, r *http.Request) {
@@ -2600,6 +2668,11 @@ func newMockController(t *testing.T) *httptest.Server {
 		mu.Lock()
 		defer mu.Unlock()
 		_ = json.NewEncoder(w).Encode(ssids)
+	})
+	mux.HandleFunc("/debug/switchPorts", func(w http.ResponseWriter, _ *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+		_ = json.NewEncoder(w).Encode(switchPorts)
 	})
 	mux.HandleFunc("/debug/profiles", func(w http.ResponseWriter, _ *http.Request) {
 		mu.Lock()
