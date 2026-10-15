@@ -85,10 +85,31 @@ func (c *Client) GetPortProfile(ctx context.Context, siteID, id string) (*PortPr
 	return nil, fmt.Errorf("port profile %q not found on site %q", id, siteID)
 }
 
+// profileCreateDefaults are fields a v5.15 controller will not default on
+// create. Leaving any one out gets "-1001: must not be null", once per missing
+// field and without naming it; this set was narrowed down by elimination.
+//
+// The values match the built-in "Default" profile. They only fill fields the
+// caller left unset.
+var profileCreateDefaults = map[string]any{
+	"poe":                  2, // keep the device's own PoE setting
+	"bandWidthCtrlType":    0,
+	"spanningTreeEnable":   true,
+	"portIsolationEnable":  false,
+	"loopbackDetectEnable": false,
+}
+
 // CreatePortProfile creates a profile (null result → resolved by name).
 func (c *Client) CreatePortProfile(ctx context.Context, siteID string, fields map[string]any) (*PortProfile, error) {
 	name, _ := fields["name"].(string)
-	if err := c.Do(ctx, "POST", profilesPath(siteID), fields, nil); err != nil {
+	body := make(map[string]any, len(fields)+len(profileCreateDefaults))
+	for k, v := range profileCreateDefaults {
+		body[k] = v
+	}
+	for k, v := range fields {
+		body[k] = v
+	}
+	if err := c.Do(ctx, "POST", profilesPath(siteID), body, nil); err != nil {
 		return nil, fmt.Errorf("creating port profile: %w", err)
 	}
 	profs, err := c.ListPortProfiles(ctx, siteID)

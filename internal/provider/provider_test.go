@@ -646,6 +646,14 @@ func newMockController(t *testing.T, opts ...mockOption) *httptest.Server {
 		case http.MethodPost:
 			var in map[string]any
 			_ = json.NewDecoder(r.Body).Decode(&in)
+			// v5.15 refuses a create missing any of these with "-1001: must
+			// not be null" and no field name.
+			for _, k := range []string{"poe", "bandWidthCtrlType", "spanningTreeEnable", "portIsolationEnable", "loopbackDetectEnable"} {
+				if in[k] == nil {
+					writeEnvelope(w, -1001, "must not be null", nil)
+					return
+				}
+			}
 			id := fmt.Sprintf("prof-%d", profNext)
 			profNext++
 			in["id"] = id

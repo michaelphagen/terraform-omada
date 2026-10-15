@@ -153,3 +153,29 @@ resource "omada_port_profile" "test" {
 		},
 	})
 }
+
+// TestAccPortProfileCreateMinimal creates a profile with only a name and a
+// native network. The mock, like a v5.15 controller, refuses a create missing
+// poe, bandWidthCtrlType, spanningTreeEnable, portIsolationEnable or
+// loopbackDetectEnable, so this fails if the client stops defaulting them.
+func TestAccPortProfileCreateMinimal(t *testing.T) {
+	srv := newMockController(t)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: testProviderConfig(srv.URL) + `
+resource "omada_port_profile" "iot" {
+  name              = "iot"
+  native_network_id = "net-1"
+}`,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet("omada_port_profile.iot", "id"),
+					resource.TestCheckResourceAttr("omada_port_profile.iot", "poe", "2"),
+					resource.TestCheckResourceAttr("omada_port_profile.iot", "spanning_tree_enable", "true"),
+				),
+			},
+		},
+	})
+}
