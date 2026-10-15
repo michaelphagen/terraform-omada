@@ -1045,21 +1045,49 @@ func newMockController(t *testing.T, opts ...mockOption) *httptest.Server {
 	})
 
 	// Devices list — result is a bare JSON array (no pagination envelope), like
-	// the real controller. Seeded with one switch and one AP.
+	// the real controller. Seeded with one switch and one AP, and stateful so
+	// a switch rename shows up on the next read.
+	devices := []map[string]any{
+		{"name": "SW-1", "type": "switch", "model": "ES205GP", "mac": "8C-86-DD-10-50-CA",
+			"sn": "225", "ip": "10.10.99.2", "status": 14, "statusCategory": 1,
+			"firmwareVersion": "1.0.6 Build 20260329", "version": "1.0.6",
+			"needUpgrade": false, "uptimeLong": 5656402, "clientNum": 0, "hwVersion": "1.0"},
+		{"name": "AP-1", "type": "ap", "model": "EAP610", "mac": "60-83-E7-4B-1B-40",
+			"sn": "226", "ip": "10.10.99.4", "status": 14, "statusCategory": 1,
+			"firmwareVersion": "1.2.3", "version": "1.2.3",
+			"needUpgrade": true, "uptimeLong": 1000, "clientNum": 7, "hwVersion": "1.0"},
+	}
 	mux.HandleFunc("/abc123/api/v2/sites/site-1/devices", func(w http.ResponseWriter, r *http.Request) {
 		if !requireToken(w, r) {
 			return
 		}
-		writeEnvelope(w, 0, "", []map[string]any{
-			{"name": "SW-1", "type": "switch", "model": "ES205GP", "mac": "8C-86-DD-10-50-CA",
-				"sn": "225", "ip": "10.10.99.2", "status": 14, "statusCategory": 1,
-				"firmwareVersion": "1.0.6 Build 20260329", "version": "1.0.6",
-				"needUpgrade": false, "uptimeLong": 5656402, "clientNum": 0, "hwVersion": "1.0"},
-			{"name": "AP-1", "type": "ap", "model": "EAP610", "mac": "60-83-E7-4B-1B-40",
-				"sn": "226", "ip": "10.10.99.4", "status": 14, "statusCategory": 1,
-				"firmwareVersion": "1.2.3", "version": "1.2.3",
-				"needUpgrade": true, "uptimeLong": 1000, "clientNum": 7, "hwVersion": "1.0"},
-		})
+		mu.Lock()
+		defer mu.Unlock()
+		writeEnvelope(w, 0, "", devices)
+	})
+
+	// The switch's own document. PATCH is a partial update carrying only the
+	// name, as the UI sends it; anything else in the body is refused so a
+	// provider that started sending more would fail here.
+	mux.HandleFunc("/abc123/api/v2/sites/site-1/switches/8C-86-DD-10-50-CA", func(w http.ResponseWriter, r *http.Request) {
+		if !requireToken(w, r) {
+			return
+		}
+		if r.Method != http.MethodPatch {
+			writeEnvelope(w, -1600, "no such path", nil)
+			return
+		}
+		var in map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&in)
+		name, ok := in["name"].(string)
+		if !ok || len(in) != 1 {
+			writeEnvelope(w, -1001, "General error", nil)
+			return
+		}
+		mu.Lock()
+		defer mu.Unlock()
+		devices[0]["name"] = name
+		writeEnvelope(w, 0, "", nil)
 	})
 
 	// Switch ports — the provider's one cross-surface object. The mock keeps
@@ -2697,6 +2725,15 @@ func newMockController(t *testing.T, opts ...mockOption) *httptest.Server {
 		mu.Lock()
 		defer mu.Unlock()
 		_ = json.NewEncoder(w).Encode(ssids)
+	})
+	mux.HandleFunc("/debug/devices", func(w http.ResponseWriter, _ *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+		byMAC := map[string]map[string]any{}
+		for _, d := range devices {
+			byMAC[d["mac"].(string)] = d
+		}
+		_ = json.NewEncoder(w).Encode(byMAC)
 	})
 	mux.HandleFunc("/debug/switchPorts", func(w http.ResponseWriter, _ *http.Request) {
 		mu.Lock()

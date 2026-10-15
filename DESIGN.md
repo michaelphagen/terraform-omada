@@ -625,7 +625,7 @@ Every configuration endpoint found on the controller, and where it stands.
 | `/setting/iot/radio` | ✅ `omada_iot_radio` — **Open API only** |
 | `/setting/iot/devices/config` | ⚠️ `omada_iot_beacon` — create/delete unverified (§5.1) |
 | `/setting/iot/servers` | ✅ `omada_iot_server` |
-| per-device configuration | ⚠️ `omada_switch_port`, `omada_gateway`, `omada_access_point` (§5.5) |
+| per-device configuration | ⚠️ `omada_switch_port`, `omada_switch`, `omada_gateway`, `omada_access_point` (§5.5) |
 
 Not found despite looking, and so presumably unsupported on this hardware or
 named unlike anything tried: DMZ, port triggering, multi-nets NAT, switch-side
@@ -907,6 +907,11 @@ Open API body carries, and sends the rest back as it was read. The read and
 the write are separate calls, so a UI edit made in between is lost. A `-1001`
 or a missing route on this path is reported as `ErrOpenAPINotConfigured`,
 which keeps the v6.2 failure unchanged.
+
+**A switch's own name is a partial update.** `PATCH /sites/{site}/switches/{mac}`
+with `{"name": …}` is what the UI sends to rename a switch, and nothing else on
+the device changes (confirmed on v5.15 with ES206X-M2 and ES210X-M2 switches).
+`omada_switch` models only that; its read comes from the device list.
 
 **The gateway turned out to be the easy one.** `PATCH /sites/{site}/gateways/{mac}`
 on the *web* API is a genuine partial update — a body with one key changes that
