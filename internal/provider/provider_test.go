@@ -669,7 +669,7 @@ func newMockController(t *testing.T, opts ...mockOption) *httptest.Server {
 			// v5.15 refuses a create missing any of these with "-1001: must
 			// not be null" and no field name.
 			for _, k := range []string{"poe", "bandWidthCtrlType", "spanningTreeEnable", "portIsolationEnable", "loopbackDetectEnable"} {
-				if in[k] == nil {
+				if cfg.v5 && in[k] == nil {
 					writeEnvelope(w, -1001, "must not be null", nil)
 					return
 				}

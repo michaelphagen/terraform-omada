@@ -94,8 +94,8 @@ func (c *Client) GetPortProfile(ctx context.Context, siteID, id string) (*PortPr
 // create. Leaving any one out gets "-1001: must not be null", once per missing
 // field and without naming it; this set was narrowed down by elimination.
 //
-// The values match the built-in "Default" profile. They only fill fields the
-// caller left unset.
+// The values match the built-in "Default" profile. They are only sent to a v5
+// controller, and only fill fields the caller left unset.
 var profileCreateDefaults = map[string]any{
 	"poe":                  2, // keep the device's own PoE setting
 	"bandWidthCtrlType":    0,
@@ -107,9 +107,15 @@ var profileCreateDefaults = map[string]any{
 // CreatePortProfile creates a profile (null result → resolved by name).
 func (c *Client) CreatePortProfile(ctx context.Context, siteID string, fields map[string]any) (*PortProfile, error) {
 	name, _ := fields["name"].(string)
+	v5, err := c.isV5(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("creating port profile: %w", err)
+	}
 	body := make(map[string]any, len(fields)+len(profileCreateDefaults))
-	for k, v := range profileCreateDefaults {
-		body[k] = v
+	if v5 {
+		for k, v := range profileCreateDefaults {
+			body[k] = v
+		}
 	}
 	for k, v := range fields {
 		body[k] = v

@@ -378,7 +378,7 @@ preserved via read-modify-write.
 | `omada_wlan_group` | CRUD | live | |
 | `omada_mdns_reflector` | CRUD | live | |
 | `omada_mdns_profile` | CRUD | live, see §5.3 | separate collection (`/setting/profiles/mdns`) from the reflector rules; controller caps custom profiles per site (5 on dev hardware), reported as `mdnsCustomMaxProfileNum` |
-| `omada_port_profile` | CRUD | live · subset | STP block deep-merged; create fills in five fields v5.15 will not leave null |
+| `omada_port_profile` | CRUD | live · subset | STP block deep-merged; on v5, create fills in five fields v5.15 will not leave null |
 | `omada_wireless_network` | CRUD | live · subset | `psk` write-only; `vlan_enable` needs `lan_network_id` — see §5.3 |
 | `omada_static_route` | CRUD | live | update is `PUT` (`PATCH` → `-1600`) |
 | `omada_portal` | CRUD | live · subset | write-only `password`; bare-array list; PATCH RMW |
