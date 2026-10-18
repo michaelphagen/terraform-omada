@@ -9,6 +9,7 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
@@ -112,18 +113,10 @@ func (d *portProfilesDataSource) Read(ctx context.Context, req datasource.ReadRe
 		return
 	}
 
-	siteID := config.SiteID.ValueString()
-	if siteID == "" {
-		name := d.data.defaultSite
-		if !config.SiteName.IsNull() && config.SiteName.ValueString() != "" {
-			name = config.SiteName.ValueString()
-		}
-		id, err := d.data.client.ResolveSiteID(ctx, name)
-		if err != nil {
-			resp.Diagnostics.AddError("Unable to resolve site", err.Error())
-			return
-		}
-		siteID = id
+	siteID, diags := d.resolveSiteID(ctx, config)
+	resp.Diagnostics.Append(diags...)
+	if resp.Diagnostics.HasError() {
+		return
 	}
 
 	profiles, err := d.data.client.ListPortProfiles(ctx, siteID)
@@ -146,4 +139,23 @@ func (d *portProfilesDataSource) Read(ctx context.Context, req datasource.ReadRe
 		})
 	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
+}
+
+// resolveSiteID picks the site to query: explicit site_id, else site name,
+// else the provider's default site.
+func (d *portProfilesDataSource) resolveSiteID(ctx context.Context, config portProfilesDataSourceModel) (string, diag.Diagnostics) {
+	var diags diag.Diagnostics
+	if !config.SiteID.IsNull() && config.SiteID.ValueString() != "" {
+		return config.SiteID.ValueString(), diags
+	}
+	name := d.data.defaultSite
+	if !config.SiteName.IsNull() && config.SiteName.ValueString() != "" {
+		name = config.SiteName.ValueString()
+	}
+	id, err := d.data.client.ResolveSiteID(ctx, name)
+	if err != nil {
+		diags.AddError("Unable to resolve site", err.Error())
+		return "", diags
+	}
+	return id, diags
 }
