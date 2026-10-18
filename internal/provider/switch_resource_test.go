@@ -5,6 +5,7 @@ package provider
 
 import (
 	"fmt"
+	"net/http"
 	"regexp"
 	"testing"
 
@@ -89,6 +90,49 @@ resource "omada_switch" "ap" {
   name = "Hallway AP"
 }`,
 				ExpectError: regexp.MustCompile(`not a switch`),
+			},
+		},
+	})
+}
+
+// TestAccSwitchResourceReadErrors keeps the switch in state when the device
+// list fails, and only drops it once the switch has left the site.
+func TestAccSwitchResourceReadErrors(t *testing.T) {
+	srv := newMockController(t)
+	debug := func(method, query string) func() {
+		return func() {
+			req, _ := http.NewRequest(method, srv.URL+"/debug/devices?"+query, nil)
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				t.Fatalf("debug %s: %v", method, err)
+			}
+			_ = resp.Body.Close()
+		}
+	}
+	config := testProviderConfig(srv.URL) + `
+resource "omada_switch" "sw" {
+  mac  = "8C-86-DD-10-50-CA"
+  name = "Lab Switch"
+}`
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{Config: config},
+			{
+				PreConfig:   debug(http.MethodPost, "down=true"),
+				Config:      config,
+				PlanOnly:    true,
+				ExpectError: regexp.MustCompile(`Unable to read switch`),
+			},
+			{
+				PreConfig: func() {
+					debug(http.MethodPost, "down=false")()
+					debug(http.MethodDelete, "mac=8C-86-DD-10-50-CA")()
+				},
+				Config:             config,
+				PlanOnly:           true,
+				ExpectNonEmptyPlan: true,
 			},
 		},
 	})

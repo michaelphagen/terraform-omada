@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	pathpkg "path"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -1062,12 +1063,18 @@ func newMockController(t *testing.T, opts ...mockOption) *httptest.Server {
 			"firmwareVersion": "1.2.3", "version": "1.2.3",
 			"needUpgrade": true, "uptimeLong": 1000, "clientNum": 7, "hwVersion": "1.0"},
 	}
+	// devicesDown makes the list fail, standing in for an outage.
+	devicesDown := false
 	mux.HandleFunc("/abc123/api/v2/sites/site-1/devices", func(w http.ResponseWriter, r *http.Request) {
 		if !requireToken(w, r) {
 			return
 		}
 		mu.Lock()
 		defer mu.Unlock()
+		if devicesDown {
+			writeEnvelope(w, -1, "General error", nil)
+			return
+		}
 		writeEnvelope(w, 0, "", devices)
 	})
 
@@ -2731,9 +2738,21 @@ func newMockController(t *testing.T, opts ...mockOption) *httptest.Server {
 		defer mu.Unlock()
 		_ = json.NewEncoder(w).Encode(ssids)
 	})
-	mux.HandleFunc("/debug/devices", func(w http.ResponseWriter, _ *http.Request) {
+	// DELETE /debug/devices?mac=... removes a device from the site, and
+	// POST /debug/devices?down=true|false toggles the outage.
+	mux.HandleFunc("/debug/devices", func(w http.ResponseWriter, r *http.Request) {
 		mu.Lock()
 		defer mu.Unlock()
+		switch r.Method {
+		case http.MethodDelete:
+			devices = slices.DeleteFunc(devices, func(d map[string]any) bool {
+				return d["mac"] == r.URL.Query().Get("mac")
+			})
+			return
+		case http.MethodPost:
+			devicesDown = r.URL.Query().Get("down") == "true"
+			return
+		}
 		byMAC := map[string]map[string]any{}
 		for _, d := range devices {
 			byMAC[d["mac"].(string)] = d

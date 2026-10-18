@@ -5,6 +5,7 @@ package provider
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -187,9 +188,13 @@ func (r *switchResource) Read(ctx context.Context, req resource.ReadRequest, res
 		return
 	}
 	cur, err := r.getSwitch(ctx, siteID, state.MAC.ValueString())
-	if err != nil {
+	if errors.Is(err, omada.ErrDeviceNotFound) {
 		// Removed from the site: nothing left to manage.
 		resp.State.RemoveResource(ctx)
+		return
+	}
+	if err != nil {
+		resp.Diagnostics.AddError("Unable to read switch", err.Error())
 		return
 	}
 	state.refresh(cur, siteID, siteName)

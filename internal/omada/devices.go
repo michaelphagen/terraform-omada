@@ -5,6 +5,7 @@ package omada
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 )
@@ -52,9 +53,13 @@ func switchPath(siteID, mac string) string {
 	return fmt.Sprintf("/sites/%s/switches/%s", siteID, NormalizeMAC(mac))
 }
 
+// ErrDeviceNotFound is returned by GetDevice when the MAC is not in the site's
+// inventory, so callers can tell a removed device apart from a failed request.
+var ErrDeviceNotFound = errors.New("device not found")
+
 // GetDevice returns one adopted device by MAC from the site's inventory. A MAC
-// that is not in the inventory is an error: the device was never adopted, or
-// has been removed from the site.
+// that is not in the inventory returns ErrDeviceNotFound: the device was never
+// adopted, or has been removed from the site.
 func (c *Client) GetDevice(ctx context.Context, siteID, mac string) (*Device, error) {
 	devices, err := c.ListDevices(ctx, siteID)
 	if err != nil {
@@ -66,7 +71,7 @@ func (c *Client) GetDevice(ctx context.Context, siteID, mac string) (*Device, er
 			return &devices[i], nil
 		}
 	}
-	return nil, fmt.Errorf("site %q has no adopted device %s", siteID, want)
+	return nil, fmt.Errorf("%w: site %q has no adopted device %s", ErrDeviceNotFound, siteID, want)
 }
 
 // RenameSwitch sets a switch's display name:
