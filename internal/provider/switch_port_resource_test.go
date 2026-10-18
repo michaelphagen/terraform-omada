@@ -124,7 +124,7 @@ resource "omada_switch_port" "nas" {
 // refuses any body that is not the whole port document, and the check on poe
 // shows the unmodelled keys were sent back as they were read.
 func TestAccSwitchPortWebAPIWrite(t *testing.T) {
-	srv := newMockController(t, withWebAPIPortWrite())
+	srv := newMockController(t, withV5Controller())
 
 	resource.Test(t, resource.TestCase{
 		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,

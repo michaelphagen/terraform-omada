@@ -5,7 +5,6 @@ package omada
 
 import (
 	"context"
-	"errors"
 	"fmt"
 )
 
@@ -132,14 +131,22 @@ func (c *Client) GetSwitchPort(ctx context.Context, siteID, mac string, port int
 	return nil, fmt.Errorf("switch %s has no port %d (it has %d ports)", mac, port, len(ports))
 }
 
-// UpdateSwitchPort writes a port's configuration through the Open API when it
-// is configured, and through the web API otherwise.
+// UpdateSwitchPort writes a port's configuration through the Open API. Without
+// Open API credentials a v5 controller is written through the web API instead
+// (see updateSwitchPortWebAPI).
 //
-// Without Open API credentials, a controller that has no web-API port write
-// (v6.2) fails with ErrOpenAPINotConfigured, which says where to get them.
+// Anything else without credentials returns ErrOpenAPINotConfigured, which is
+// the common first failure — the admin username and password do not reach the
+// Open API, and v6.2 refuses the web-API port write.
 func (c *Client) UpdateSwitchPort(ctx context.Context, siteID, mac string, port int, p SwitchPort) error {
 	if !c.openAPIConfigured() {
-		return c.updateSwitchPortWebAPI(ctx, siteID, mac, port, p)
+		v5, err := c.isV5(ctx)
+		if err != nil {
+			return fmt.Errorf("updating port %d on switch %s: %w", port, mac, err)
+		}
+		if v5 {
+			return c.updateSwitchPortWebAPI(ctx, siteID, mac, port, p)
+		}
 	}
 	body := switchPortUpdate{
 		Duplex:                    p.Duplex,
@@ -199,14 +206,6 @@ func (c *Client) updateSwitchPortWebAPI(ctx context.Context, siteID, mac string,
 
 	path := fmt.Sprintf("%s/%d", switchPortsPath(siteID, mac), port)
 	if err := c.Do(ctx, "PATCH", path, doc, nil); err != nil {
-		// v6.2 has the route but refuses every body with -1001, the whole
-		// document included (DESIGN.md §5.5). There the only way to write a
-		// port is the Open API, so point at the credentials.
-		var ae *APIError
-		if routeAbsent(err) || (errors.As(err, &ae) && ae.Code == -1001) {
-			return fmt.Errorf("updating port %d on switch %s: this controller has no web-API port "+
-				"write, so it needs the Open API: %w", port, mac, ErrOpenAPINotConfigured)
-		}
 		return fmt.Errorf("updating port %d on switch %s through the web API: %w", port, mac, err)
 	}
 	return nil

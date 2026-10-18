@@ -60,7 +60,7 @@ func (r *switchPortResource) Schema(_ context.Context, _ resource.SchemaRequest,
 			"~> **Writes prefer Open API credentials** (`openapi_client_id` / " +
 			"`openapi_client_secret`). The read always comes from the web API. On v6.2 controllers the " +
 			"web API has no per-port write, so the admin username and password alone are not enough and " +
-			"the failure is at apply time, not plan. v5.15 controllers do have one, and without Open API " +
+			"the failure is at apply time, not plan. v5 controllers do have one, and without Open API " +
 			"credentials the provider uses it instead. That route only accepts the whole port document, " +
 			"so the write is a read-modify-write and can overwrite a UI change made at the same moment.\n\n" +
 			"~> **A port is physical: it cannot be created or destroyed.** Terraform *adopts* an " +

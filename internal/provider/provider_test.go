@@ -49,17 +49,18 @@ func TestProviderSchema(t *testing.T) {
 }
 
 // mockOption changes newMockController's behaviour where controller versions
-// differ. The default is a v6.2 controller.
+// differ. The default is a v6 controller.
 type mockOption func(*mockConfig)
 
 type mockConfig struct {
-	// webAPIPortWrite serves PATCH /sites/{site}/switches/{mac}/ports/{port}
-	// on the web API, as v5.15 controllers do.
-	webAPIPortWrite bool
+	// v5 makes the mock answer as a v5.15 controller: /api/info reports 5.15,
+	// the web-API port write accepts a whole port document, and a port profile
+	// create refuses the fields v6 would default.
+	v5 bool
 }
 
-func withWebAPIPortWrite() mockOption {
-	return func(c *mockConfig) { c.webAPIPortWrite = true }
+func withV5Controller() mockOption {
+	return func(c *mockConfig) { c.v5 = true }
 }
 
 // newMockController returns an httptest server that emulates the Omada v6
@@ -76,8 +77,12 @@ func newMockController(t *testing.T, opts ...mockOption) *httptest.Server {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("/api/info", func(w http.ResponseWriter, _ *http.Request) {
+		ver := "6.0.0"
+		if cfg.v5 {
+			ver = "5.15.24.19"
+		}
 		writeEnvelope(w, 0, "", map[string]any{
-			"omadacId": "abc123", "controllerVer": "6.0.0", "apiVer": "3", "type": 1,
+			"omadacId": "abc123", "controllerVer": ver, "apiVer": "3", "type": 1,
 		})
 	})
 
@@ -1094,7 +1099,7 @@ func newMockController(t *testing.T, opts ...mockOption) *httptest.Server {
 	// both halves honest: the read is served on the web API, and the write is
 	// only accepted on the Open API with a bearer token from the grant below.
 	// A test that broke that split (say, by writing through the web API) would
-	// fail here rather than only against a real controller. withWebAPIPortWrite
+	// fail here rather than only against a real controller. withV5Controller
 	// adds the v5.15 web-API write alongside it.
 	switchPorts := map[int]map[string]any{}
 	for i := 1; i <= 5; i++ {
@@ -1130,14 +1135,14 @@ func newMockController(t *testing.T, opts ...mockOption) *httptest.Server {
 	// The web API's per-port route. v6.2 has it but refuses every body with
 	// -1001 (DESIGN.md §5.5). v5.15 accepts the whole port document and
 	// refuses a partial one with the same "General error", so with
-	// withWebAPIPortWrite the mock requires every key the read returned. A
+	// withV5Controller the mock requires every key the read returned. A
 	// provider that sent only the modelled fields would reset PoE and the rest
 	// on real hardware.
 	mux.HandleFunc("/abc123/api/v2/sites/site-1/switches/8C-86-DD-10-50-CA/ports/", func(w http.ResponseWriter, r *http.Request) {
 		if !requireToken(w, r) {
 			return
 		}
-		if !cfg.webAPIPortWrite {
+		if !cfg.v5 {
 			writeEnvelope(w, -1001, "General error", nil)
 			return
 		}

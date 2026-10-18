@@ -902,11 +902,12 @@ gateway:
 takes the full port document as read and still refuses any subset with
 `-1001 General error`. That breaks the allow-list rule above, so it is only a
 fallback: `UpdateSwitchPort` uses it when no Open API credentials are
-configured, reads the port as an untyped map, changes only the nine keys the
-Open API body carries, and sends the rest back as it was read. The read and
-the write are separate calls, so a UI edit made in between is lost. A `-1001`
-or a missing route on this path is reported as `ErrOpenAPINotConfigured`,
-which keeps the v6.2 failure unchanged.
+configured and the controller reports a 5.x version, reads the port as an
+untyped map, changes only the nine keys the Open API body carries, and sends
+the rest back as it was read. The read and the write are separate calls, so a
+UI edit made in between is lost. Any other version without credentials gets
+`ErrOpenAPINotConfigured` before anything is sent, as before, and an error
+from the v5 write is passed through as it came back.
 
 **A switch's own name is a partial update.** `PATCH /sites/{site}/switches/{mac}`
 with `{"name": …}` is what the UI sends to rename a switch, and nothing else on

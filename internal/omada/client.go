@@ -14,7 +14,6 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -74,32 +73,6 @@ type APIError struct {
 
 func (e *APIError) Error() string {
 	return fmt.Sprintf("omada api error %d: %s", e.Code, e.Msg)
-}
-
-// HTTPError is returned when the response body is not a JSON envelope at all,
-// typically the plain 404 page a controller serves for a route it does not have.
-type HTTPError struct {
-	Method, Path string
-	Status       int
-	Err          error
-}
-
-func (e *HTTPError) Error() string {
-	return fmt.Sprintf("decoding response envelope (%s %s, http %d): %v", e.Method, e.Path, e.Status, e.Err)
-}
-
-func (e *HTTPError) Unwrap() error { return e.Err }
-
-// routeAbsent reports whether err means the controller has no such endpoint, as
-// opposed to rejecting the request. v6 answers a missing route with a plain
-// 404; other versions wrap it in envelope code -1600 ("no such path").
-func routeAbsent(err error) bool {
-	var he *HTTPError
-	if errors.As(err, &he) && he.Status == http.StatusNotFound {
-		return true
-	}
-	var ae *APIError
-	return errors.As(err, &ae) && ae.Code == -1600
 }
 
 // errSessionExpired is the controller errorCode signalling an expired session.
@@ -283,7 +256,7 @@ func (c *Client) do(ctx context.Context, method, path string, body, out any, ret
 
 	var env APIResponse
 	if err := json.Unmarshal(raw, &env); err != nil {
-		return &HTTPError{Method: method, Path: path, Status: resp.StatusCode, Err: err}
+		return fmt.Errorf("decoding response envelope (%s %s, http %d): %w", method, path, resp.StatusCode, err)
 	}
 
 	if isSessionExpired(env.ErrorCode) && retry {
