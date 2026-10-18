@@ -138,7 +138,8 @@ func (m *switchResourceModel) refresh(d *omada.Device, siteID, siteName string) 
 
 // apply is shared by Create and Update. The name is only written when it
 // differs from the controller's, so adopting a switch under its current name
-// sends nothing.
+// sends nothing. After a rename the switch is read again, so state holds what
+// the controller stored.
 func (r *switchResource) apply(ctx context.Context, plan *switchResourceModel, diags *diagSink) {
 	siteID, siteName := r.resolveSite(ctx, *plan, diags)
 	if siteID == "" {
@@ -157,7 +158,10 @@ func (r *switchResource) apply(ctx context.Context, plan *switchResourceModel, d
 			diags.AddError("Unable to rename switch", err.Error())
 			return
 		}
-		cur.Name = plan.Name.ValueString()
+		if cur, err = r.getSwitch(ctx, siteID, mac); err != nil {
+			diags.AddError("Unable to read switch after rename", err.Error())
+			return
+		}
 	}
 
 	plan.refresh(cur, siteID, siteName)
@@ -202,13 +206,11 @@ func (r *switchResource) Read(ctx context.Context, req resource.ReadRequest, res
 }
 
 func (r *switchResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	var plan, state switchResourceModel
+	var plan switchResourceModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
-	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	plan.SiteID = state.SiteID
 	r.apply(ctx, &plan, &diagSink{&resp.Diagnostics})
 	if resp.Diagnostics.HasError() {
 		return
