@@ -907,7 +907,9 @@ untyped map, changes only the nine keys the Open API body carries, and sends
 the rest back as it was read. The read and the write are separate calls, so a
 UI edit made in between is lost. Any other version without credentials gets
 `ErrOpenAPINotConfigured` before anything is sent, as before, and an error
-from the v5 write is passed through as it came back.
+from the v5 write is passed through as it came back. v5.15 answers an unknown
+`profileId` with success and keeps the old profile, so the port is read again
+after the write and a profile that didn't stick is an error.
 
 **A switch's own name is a partial update.** `PATCH /sites/{site}/switches/{mac}`
 with `{"name": …}` is what the UI sends to rename a switch, and nothing else on

@@ -183,13 +183,7 @@ func (c *Client) updateSwitchPortWebAPI(ctx context.Context, siteID, mac string,
 		return fmt.Errorf("reading ports on switch %s before writing port %d: %w", mac, port, err)
 	}
 
-	var doc map[string]any
-	for _, d := range docs {
-		if n, ok := d["port"].(float64); ok && int(n) == port {
-			doc = d
-			break
-		}
-	}
+	doc := portDoc(docs, port)
 	if doc == nil {
 		return fmt.Errorf("switch %s has no port %d (it has %d ports)", mac, port, len(docs))
 	}
@@ -207,6 +201,25 @@ func (c *Client) updateSwitchPortWebAPI(ctx context.Context, siteID, mac string,
 	path := fmt.Sprintf("%s/%d", switchPortsPath(siteID, mac), port)
 	if err := c.Do(ctx, "PATCH", path, doc, nil); err != nil {
 		return fmt.Errorf("updating port %d on switch %s through the web API: %w", port, mac, err)
+	}
+
+	// v5.15 answers an unknown profileId with success and keeps the old
+	// profile, so check what it stored.
+	if err := c.Do(ctx, "GET", switchPortsPath(siteID, mac), nil, &docs); err != nil {
+		return fmt.Errorf("reading port %d on switch %s after writing it: %w", port, mac, err)
+	}
+	if got := portDoc(docs, port); got == nil || got["profileId"] != p.ProfileID {
+		return fmt.Errorf("switch %s kept its old profile on port %d; check that profile %q exists", mac, port, p.ProfileID)
+	}
+	return nil
+}
+
+// portDoc finds a port by number in the web API's port list.
+func portDoc(docs []map[string]any, port int) map[string]any {
+	for _, d := range docs {
+		if n, ok := d["port"].(float64); ok && int(n) == port {
+			return d
+		}
 	}
 	return nil
 }

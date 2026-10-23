@@ -155,3 +155,26 @@ resource "omada_switch_port" "nas" {
 		},
 	})
 }
+
+// TestAccSwitchPortWebAPIUnknownProfile sets a profile id the controller does
+// not have. v5.15 answers that with success and keeps the old profile, so the
+// provider has to catch it on the read-back.
+func TestAccSwitchPortWebAPIUnknownProfile(t *testing.T) {
+	srv := newMockController(t, withV5Controller())
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testAccProtoV6ProviderFactories,
+		Steps: []resource.TestStep{
+			{
+				Config: testProviderConfig(srv.URL) + `
+resource "omada_switch_port" "nas" {
+  switch_mac = "8C-86-DD-10-50-CA"
+  port       = 4
+  name       = "NAS"
+  profile_id = "prof-missing"
+}`,
+				ExpectError: regexp.MustCompile(`kept its old profile on port 4`),
+			},
+		},
+	})
+}

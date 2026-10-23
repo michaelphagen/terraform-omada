@@ -1176,6 +1176,11 @@ func newMockController(t *testing.T, opts ...mockOption) *httptest.Server {
 				return
 			}
 		}
+		// Like v5.15, an unknown profileId still succeeds but the port keeps
+		// its old profile.
+		if id := body["profileId"]; id != "prof-all" && id != "prof-main" {
+			body["profileId"] = cur["profileId"]
+		}
 		for k, v := range body {
 			cur[k] = v
 		}
